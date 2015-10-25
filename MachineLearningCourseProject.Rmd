@@ -1,0 +1,78 @@
+---
+title: "Machine Learning Course Project"
+author: "Matteo Fiorani"
+date: "25 ottobre 2015"
+output: html_document
+---
+
+## Loading dataset and needed libraries
+Firstly, we load need libraries and datasets from the corresponding web urls.
+```{r, echo = TRUE}
+library(caret);
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+## Model selection, features selection and data cleaning
+I decided to work with a Random Forest model, slower but potentially more accurate.
+In order to have a clean model, all features containing NA values, missing values or "DIV/0" errors from former excel manipulations are removed. Further, only predictors with numeric values are kept.
+
+```{r, echo = TRUE}
+trainingMiss <- sapply(training, function (x) any(is.na(x) | x == "" | x == "#DIV/0!"))
+trainingTemp <- training[,trainingMiss == FALSE]
+
+numIndex <- which(lapply(trainingTemp, class) %in% "numeric")
+
+trainingClean <- trainingTemp[, numIndex]
+trainingClean$classe <- trainingTemp$classe
+
+```
+
+## Partitioning
+In order to perform cross validation, the training data is splitted into validation ("CValidation") and training ("CTraining") sets. Proportion is set as 70 / 30.
+
+```{r, echo = TRUE}
+set.seed(11235)
+inTrain <- createDataPartition(y = trainingClean$classe, p = 0.7, list = FALSE)
+CTraining <- trainingClean[inTrain,]
+CValidation <- trainingClean[-inTrain,]
+```
+
+##  Model estimation and cross validation
+We train the random forest model on the CTraining dataset, and then we perfom a cross validation with the CValidation dataset, which contains the 30% of observations we left for out-of-sample error estimates. Overall accuracy results as being 99.4 %.
+
+```{r}
+library(parallel)
+library(doParallel)
+
+cl<- makeCluster(detectCores() -1)
+registerDoParallel(cl)
+modFit <- train(classe ~., data = CTraining, method = "rf")
+stopCluster(cl)
+
+pred <- predict(modFit, newdata = CValidation)
+confusionMatrix(pred, CValidation$classe)
+```
+
+## Final considerations
+Random Forest is well suited for an accurate prediction of our dataset.
+I  also performed predictions of the test dataset based on the obtained final model. Indeed, all 20 test cases were correctly predicted.
+
+```{r}
+
+FinalPredictions <- predict(modFit, test)
+
+FinalPredictions
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(FinalPredictions)
+
+```
+
